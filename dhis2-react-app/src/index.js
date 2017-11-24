@@ -1,37 +1,51 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 
-// Get the root DOM element where the React app will be rendered
-const rootEl = document.querySelector('#root');
+// Import the init function from D2
+import { init } from 'd2/lib/d2';
 
-// Set the 'Authorization' header to authenticate with the DHIS instance
-const fetchOptions = {
-  headers: {
-    Authorization: `Basic ${btoa('admin:district')}`
-  }
+const rootEl = document.getElementById('root');
+
+// Prepare the D2 init config:
+const initConfig = {
+  baseUrl: 'https://play.dhis2.org/demo/api',
+  schemas: ['user', 'dataSet'],
+  headers: { authorization: `Basic ${btoa('admin:district')}` }
 };
-// Component for displaying a single user
+
+// User component - renders a single user
 function User({ user }) {
-  return <div><a href={user.href}>{user.name}</a></div>;
+  return <div><a href={user.href}>{user.displayName}</a></div>;
 }
 
-// Component for displaying a list of users
-function UserList({users}) {
+// User list component - renders a list of User components
+function UserList({ users }) {
   return (
     <div>
-      <h3>{users.length} users:</h3>
-      <div>{users.map((user) => <User user={user}/>)}</div>
+      <h3>Got {users.size} DataSets:</h3>
+      {users.toArray().map(user => <User user={user} key={user.id} />)}
     </div>
   );
 }
 
-// Fetch the list of users
-fetch('https://play.dhis2.org/demo/api/users?fields=:all', fetchOptions)
-  // Parse the results as JSON
-  .then((fetchResult) => fetchResult.json())
-  // Use the data to render a list of users
-  .then((jsonData) => {
-    ReactDOM.render(<UserList users={jsonData.users} />, rootEl);
+console.info('Initializing D2...');
+
+init(initConfig)
+  .then(d2 => {
+    console.info('D2 initialized:', d2);
+    window.d2 = d2;
+    d2.models.dataSets.list()
+      .then(dataSets => {
+        const dataSet = dataSets.toArray()[0];
+        dataSet.name = dataSet.name + '!';
+        return dataSet.save();
+      }).then(res => { console.info('Saved data set:', res); })
+      .catch(err => { console.warn('Failed to save data set:'. err); });
+
+    d2.models.dataSets.list().then(users => {
+      ReactDOM.render(<UserList users={users} />, rootEl);
+    });
   })
-  // Handle errors
-  .catch((error) => { console.warn('Error:', error); });
+  .catch(error => {
+    console.warn('D2 failed to initialize:', error);
+  })
